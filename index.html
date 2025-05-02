@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Scan UPC and Lookup Product</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="https://unpkg.com/quagga@0.12.1/dist/quagga.min.js"></script>
+  <style>
+    body { font-family: sans-serif; padding: 20px; text-align: center; }
+    #scanner-container { width: 100%; max-width: 400px; margin: auto; }
+    #result, #log { margin-top: 20px; font-size: 1.1em; white-space: pre-wrap; }
+    video { width: 100%; border-radius: 10px; }
+    button, input { margin-top: 20px; padding: 10px 20px; font-size: 16px; }
+    input { width: 200px; }
+  </style>
+</head>
+<body>
+
+<h2>Scan a Barcode</h2>
+<div id="scanner-container"></div>
+<div id="result">No barcode scanned yet.</div>
+<div>
+  <input type="text" id="manual-upc" placeholder="Enter UPC manually">
+  <button onclick="lookupManualUPC()">Lookup</button>
+</div>
+<button onclick="restartScanner()">Scan Again</button>
+
+<h3>Scanned Log</h3>
+<div id="log"></div>
+
+<script>
+  const CORS_PROXY = "https://corsproxy.io/?";
+  const API_URL = "https://api.upcitemdb.com/prod/trial/lookup";
+  const log = [];
+
+  function startScanner() {
+    Quagga.init({
+      inputStream: {
+        type: "LiveStream",
+        target: document.querySelector('#scanner-container'),
+        constraints: {
+          facingMode: "environment"
+        }
+      },
+      decoder: {
+        readers: ["upc_reader", "ean_reader", "upc_e_reader"]
+      }
+    }, function(err) {
+      if (err) {
+        console.error(err);
+        document.getElementById('result').innerText = "Error initializing scanner.";
+        return;
+      }
+      Quagga.start();
+    });
+
+    Quagga.onDetected(function(data) {
+      const code = data.codeResult.code;
+      document.getElementById('result').innerHTML = `Scanned UPC: ${code}<br>Looking up product...`;
+      Quagga.stop();
+      lookupUPC(code);
+    });
+  }
+
+  async function lookupUPC(code) {
+    try {
+      const response = await fetch(`${CORS_PROXY}${API_URL}?upc=${code}`);
+      const contentType = response.headers.get("content-type") || "";
+      if (!contentType.includes("application/json")) {
+        const text = await response.text();
+        throw new Error("Expected JSON but received non-JSON response:\n" + text);
+      }
+
+      const result = await response.json();
+
+      if (result.items && result.items.length > 0) {
+        const item = result.items[0];
+        const entry = `UPC: ${code} | Title: ${item.title} | Brand: ${item.brand}`;
+        document.getElementById('result').innerText = entry;
+        log.push(entry);
+        updateLog();
+      } else {
+        const entry = `UPC ${code} scanned, but product not found.`;
+        document.getElementById('result').innerText = entry;
+        log.push(entry);
+        updateLog();
+      }
+    } catch (err) {
+      console.error(err);
+      const entry = `Error fetching product info for ${code}: ${err.message}`;
+      document.getElementById('result').innerText = entry;
+      log.push(entry);
+      updateLog();
+    }
+  }
+
+  function updateLog() {
+    document.getElementById('log').innerText = log.join("\n");
+  }
+
+  function lookupManualUPC() {
+    const upc = document.getElementById('manual-upc').value.trim();
+    if (upc) {
+      document.getElementById('result').innerText = `Looking up UPC: ${upc}...`;
+      lookupUPC(upc);
+    }
+  }
+
+  function restartScanner() {
+    document.getElementById('result').innerText = "Scanning...";
+    Quagga.stop();
+    startScanner();
+  }
+
+  window.addEventListener("load", startScanner);
+</script>
+
+</body>
+</html>
