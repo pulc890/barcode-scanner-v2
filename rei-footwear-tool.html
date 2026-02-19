@@ -1,0 +1,718 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>REI Footwear Assistant</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;900&family=Barlow:wght@400;500;600&display=swap');
+
+  :root {
+    --rei-green: #00843D;
+    --rei-dark: #1a1a1a;
+    --rei-light: #f0ede8;
+    --rei-accent: #FF6B35;
+    --rei-muted: #6b7280;
+    --rei-card: #242424;
+    --rei-border: #3a3a3a;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--rei-dark);
+    color: var(--rei-light);
+    font-family: 'Barlow', sans-serif;
+    min-height: 100vh;
+  }
+
+  header {
+    background: var(--rei-green);
+    padding: 12px 20px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.4);
+  }
+
+  .rei-logo {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-weight: 900;
+    font-size: 26px;
+    letter-spacing: -1px;
+    color: white;
+    background: rgba(255,255,255,0.2);
+    padding: 2px 10px;
+    border-radius: 4px;
+  }
+
+  header h1 {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-weight: 700;
+    font-size: 18px;
+    color: white;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+  }
+
+  main {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 20px 16px 80px;
+  }
+
+  .scan-section {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+  @media (max-width: 600px) { .scan-section { grid-template-columns: 1fr; } }
+
+  .scan-card {
+    background: var(--rei-card);
+    border: 1px solid var(--rei-border);
+    border-radius: 12px;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .card-label {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--rei-green);
+  }
+
+  #quagga-container {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 4/3;
+    background: #111;
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  #quagga-container video { width: 100%; height: 100%; object-fit: cover; }
+
+  .scan-corner {
+    position: absolute;
+    width: 20px; height: 20px;
+    border-color: var(--rei-green);
+    border-style: solid;
+    border-width: 0;
+    pointer-events: none;
+  }
+  .scan-corner.tl { top: 20%; left: 15%; border-top-width: 3px; border-left-width: 3px; }
+  .scan-corner.tr { top: 20%; right: 15%; border-top-width: 3px; border-right-width: 3px; }
+  .scan-corner.bl { bottom: 20%; left: 15%; border-bottom-width: 3px; border-left-width: 3px; }
+  .scan-corner.br { bottom: 20%; right: 15%; border-bottom-width: 3px; border-right-width: 3px; }
+
+  .scan-anim-line {
+    position: absolute;
+    left: 15%; right: 15%;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, var(--rei-green), transparent);
+    animation: scanline 1.5s ease-in-out infinite;
+    display: none;
+  }
+  @keyframes scanline { 0%,100%{top:20%;opacity:0} 10%{opacity:1} 90%{opacity:1} 50%{top:78%;} }
+
+  input[type="text"] {
+    background: #1a1a1a;
+    border: 1px solid var(--rei-border);
+    border-radius: 8px;
+    color: var(--rei-light);
+    font-family: 'Barlow', sans-serif;
+    font-size: 15px;
+    padding: 10px 14px;
+    width: 100%;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  input:focus { border-color: var(--rei-green); }
+
+  .btn {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-weight: 700;
+    font-size: 15px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    border: none;
+    border-radius: 8px;
+    padding: 10px 20px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .btn-primary { background: var(--rei-green); color: white; }
+  .btn-primary:hover { background: #006630; }
+  .btn-primary:active { transform: scale(0.97); }
+  .btn-secondary { background: var(--rei-border); color: var(--rei-light); }
+  .btn-secondary:hover { background: #4a4a4a; }
+  .btn-accent { background: var(--rei-accent); color: white; }
+  .btn-accent:hover { background: #e55a25; }
+  .btn-sm { padding: 6px 12px; font-size: 12px; }
+
+  #result-section {
+    display: none;
+    flex-direction: column;
+    gap: 16px;
+    animation: slideUp 0.3s ease;
+  }
+  #result-section.visible { display: flex; }
+  @keyframes slideUp { from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:translateY(0)} }
+
+  .product-header {
+    background: var(--rei-card);
+    border: 1px solid var(--rei-border);
+    border-radius: 12px;
+    padding: 20px;
+  }
+
+  .product-badge {
+    background: var(--rei-green);
+    color: white;
+    font-family: 'Barlow Condensed', sans-serif;
+    font-weight: 700;
+    font-size: 11px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    padding: 3px 8px;
+    border-radius: 4px;
+  }
+
+  .product-name {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-weight: 900;
+    font-size: 28px;
+    line-height: 1.1;
+    color: white;
+    margin: 8px 0 4px;
+  }
+
+  .product-meta {
+    font-size: 14px;
+    color: var(--rei-muted);
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  .cards-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+  @media (max-width: 600px) { .cards-grid { grid-template-columns: 1fr; } }
+
+  .info-card {
+    background: var(--rei-card);
+    border: 1px solid var(--rei-border);
+    border-radius: 12px;
+    padding: 16px;
+  }
+
+  .info-card h3 {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--rei-green);
+    margin-bottom: 12px;
+  }
+
+  .pros-list, .cons-list { list-style: none; display: flex; flex-direction: column; gap: 7px; }
+
+  .pros-list li {
+    font-size: 14px;
+    padding-left: 20px;
+    position: relative;
+    line-height: 1.4;
+  }
+  .pros-list li::before { content: '✓'; position: absolute; left: 0; color: var(--rei-green); font-weight: 700; }
+
+  .cons-list li {
+    font-size: 14px;
+    padding-left: 20px;
+    position: relative;
+    line-height: 1.4;
+    color: #d1c9c0;
+  }
+  .cons-list li::before { content: '—'; position: absolute; left: 0; color: var(--rei-accent); font-weight: 700; }
+
+  .target-text { font-size: 14px; line-height: 1.6; color: #d1c9c0; }
+
+  .specs-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .spec-item { display: flex; flex-direction: column; gap: 2px; }
+  .spec-label { font-size: 10px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; color: var(--rei-muted); }
+  .spec-value { font-size: 15px; font-weight: 600; color: white; }
+
+  .bay-card {
+    background: var(--rei-card);
+    border: 1px solid var(--rei-border);
+    border-radius: 12px;
+    padding: 16px;
+  }
+
+  .bay-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .bay-header h3 {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--rei-green);
+  }
+
+  .bay-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
+
+  .bay-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: #1a1a1a;
+    border-radius: 8px;
+    padding: 10px 12px;
+    border: 1px solid var(--rei-border);
+  }
+  .bay-item.retrieved { opacity: 0.45; }
+
+  .bay-number {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-weight: 900;
+    font-size: 22px;
+    color: var(--rei-accent);
+    min-width: 55px;
+  }
+
+  .bay-details { flex: 1; }
+  .bay-size { font-size: 15px; font-weight: 600; color: white; }
+  .bay-sub { font-size: 12px; color: var(--rei-muted); }
+
+  .bay-check {
+    background: transparent;
+    border: 2px solid var(--rei-border);
+    width: 26px; height: 26px;
+    border-radius: 50%;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    transition: all 0.15s;
+    flex-shrink: 0;
+    color: white;
+  }
+  .bay-check:hover { border-color: var(--rei-green); }
+  .bay-item.retrieved .bay-check { background: var(--rei-green); border-color: var(--rei-green); }
+
+  .btn-remove {
+    background: transparent;
+    border: none;
+    color: var(--rei-muted);
+    cursor: pointer;
+    font-size: 16px;
+    padding: 2px 6px;
+    border-radius: 4px;
+    transition: all 0.1s;
+  }
+  .btn-remove:hover { color: #ff6b6b; background: rgba(255,107,107,0.1); }
+
+  .add-bay-row { display: flex; gap: 8px; flex-wrap: wrap; }
+  .add-bay-row input { width: auto; flex: 1; min-width: 80px; }
+
+  .loading-state {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 16px 0;
+    color: var(--rei-muted);
+    font-size: 14px;
+  }
+  .spinner {
+    width: 18px; height: 18px;
+    border: 2px solid var(--rei-border);
+    border-top-color: var(--rei-green);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    flex-shrink: 0;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.85);
+    z-index: 200;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+  }
+  .modal {
+    background: var(--rei-card);
+    border: 1px solid var(--rei-border);
+    border-radius: 16px;
+    padding: 28px;
+    max-width: 440px;
+    width: 100%;
+  }
+  .modal h2 { font-family: 'Barlow Condensed', sans-serif; font-weight: 900; font-size: 24px; margin-bottom: 6px; }
+  .modal p { font-size: 14px; color: var(--rei-muted); line-height: 1.6; margin-bottom: 12px; }
+  .modal-actions { display: flex; gap: 8px; margin-top: 16px; }
+
+  .notif {
+    position: fixed;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--rei-green);
+    color: white;
+    font-family: 'Barlow Condensed', sans-serif;
+    font-weight: 700;
+    font-size: 15px;
+    padding: 10px 20px;
+    border-radius: 40px;
+    z-index: 300;
+    opacity: 0;
+    transition: opacity 0.3s;
+    pointer-events: none;
+    white-space: nowrap;
+  }
+  .notif.show { opacity: 1; }
+
+  #scan-status { font-size: 12px; color: var(--rei-muted); text-align: center; }
+  .empty-bay { color: var(--rei-muted); font-size: 14px; padding: 8px 0; }
+</style>
+</head>
+<body>
+
+<div class="modal-overlay" id="api-modal">
+  <div class="modal">
+    <h2>🔑 Setup</h2>
+    <p>Enter your Anthropic API key to enable AI-powered shoe analysis. Stored in this browser session only.</p>
+    <input type="text" id="api-key-input" placeholder="sk-ant-..." style="font-family: monospace; font-size: 13px;" />
+    <div class="modal-actions">
+      <button class="btn btn-primary" style="flex:1" onclick="saveApiKey()">Save & Start</button>
+    </div>
+    <p style="margin-top: 10px; font-size: 12px;">Get a key at <a href="https://console.anthropic.com" target="_blank" style="color: var(--rei-green);">console.anthropic.com</a></p>
+  </div>
+</div>
+
+<div class="notif" id="notif"></div>
+
+<header>
+  <div class="rei-logo">REI</div>
+  <h1>Footwear Assistant</h1>
+</header>
+
+<main>
+  <div class="scan-section">
+    <div class="scan-card">
+      <div class="card-label">📷 Barcode Scanner</div>
+      <div id="quagga-container">
+        <div class="scan-corner tl"></div>
+        <div class="scan-corner tr"></div>
+        <div class="scan-corner bl"></div>
+        <div class="scan-corner br"></div>
+        <div class="scan-anim-line" id="scan-anim"></div>
+      </div>
+      <div id="scan-status">Camera off</div>
+      <div style="display:flex; gap:8px;">
+        <button class="btn btn-primary" style="flex:1" id="cam-btn" onclick="toggleCamera()">Start Camera</button>
+        <button class="btn btn-secondary" onclick="resetAll()">Reset</button>
+      </div>
+    </div>
+
+    <div class="scan-card">
+      <div class="card-label">⌨️ Manual Entry</div>
+      <div style="display:flex; flex-direction:column; gap:10px; flex:1;">
+        <div>
+          <label style="font-size:12px; color: var(--rei-muted); display:block; margin-bottom:4px;">Barcode / UPC</label>
+          <input type="text" id="manual-barcode" placeholder="e.g. 888392524751" />
+        </div>
+        <div>
+          <label style="font-size:12px; color: var(--rei-muted); display:block; margin-bottom:4px;">— or — Product Name</label>
+          <input type="text" id="manual-name" placeholder="e.g. Hoka Speedgoat 5 Men's" />
+        </div>
+        <button class="btn btn-accent" onclick="analyzeShoeManual()">Analyze Shoe →</button>
+      </div>
+      <div style="border-top: 1px solid var(--rei-border); padding-top:12px; margin-top:4px;">
+        <div class="card-label" style="margin-bottom:8px;">🔑 Anthropic API Key</div>
+        <div style="display:flex; gap:6px;">
+          <input type="text" id="key-inline" placeholder="sk-ant-..." style="font-size:12px; font-family:monospace;" />
+          <button class="btn btn-secondary btn-sm" onclick="updateKey()">Set</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="result-section">
+
+    <div class="product-header">
+      <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+        <div class="product-badge" id="product-brand">BRAND</div>
+        <div class="product-badge" style="background: var(--rei-border); color: var(--rei-muted);" id="product-type">TYPE</div>
+        <div class="product-badge" style="background: var(--rei-accent);" id="product-price">PRICE</div>
+      </div>
+      <div class="product-name" id="product-name">Loading...</div>
+      <div class="product-meta">
+        <span id="meta-gender"></span>
+        <span id="meta-terrain"></span>
+        <span id="meta-drop"></span>
+      </div>
+    </div>
+
+    <div class="cards-grid">
+      <div class="info-card">
+        <h3>✓ Pros</h3>
+        <ul class="pros-list" id="pros-list"><li class="loading-state"><div class="spinner"></div> Analyzing...</li></ul>
+      </div>
+      <div class="info-card">
+        <h3>— Cons</h3>
+        <ul class="cons-list" id="cons-list"><li class="loading-state"><div class="spinner"></div> Analyzing...</li></ul>
+      </div>
+      <div class="info-card">
+        <h3>👤 Who It's For</h3>
+        <div class="target-text" id="target-text"><div class="loading-state"><div class="spinner"></div> Analyzing...</div></div>
+      </div>
+      <div class="info-card">
+        <h3>📋 Key Specs</h3>
+        <div class="specs-grid" id="specs-grid"><div class="loading-state"><div class="spinner"></div> Loading...</div></div>
+      </div>
+    </div>
+
+    <div class="bay-card">
+      <div class="bay-header">
+        <h3>📦 Warehouse Bay List</h3>
+        <div style="display:flex; gap:6px;">
+          <button class="btn btn-secondary btn-sm" onclick="clearRetrieved()">Clear Done</button>
+          <button class="btn btn-secondary btn-sm" onclick="clearAllBays()">Clear All</button>
+        </div>
+      </div>
+      <div class="bay-list" id="bay-list">
+        <div class="empty-bay">Add bays manually below.</div>
+      </div>
+      <div class="add-bay-row">
+        <input type="text" id="bay-num-input" placeholder="Bay #" />
+        <input type="text" id="bay-size-input" placeholder="Size / Note" />
+        <button class="btn btn-primary btn-sm" onclick="addBayManual()">+ Add</button>
+      </div>
+    </div>
+
+  </div>
+</main>
+
+<script>
+let apiKey = '';
+let scanningActive = false;
+let currentProduct = null;
+let bays = [];
+
+function saveApiKey() {
+  const val = document.getElementById('api-key-input').value.trim();
+  if (!val.startsWith('sk-')) { alert('Enter a valid Anthropic API key (starts with sk-)'); return; }
+  apiKey = val;
+  document.getElementById('api-modal').style.display = 'none';
+  showNotif('API key saved ✓');
+}
+
+function updateKey() {
+  const val = document.getElementById('key-inline').value.trim();
+  if (!val.startsWith('sk-')) { showNotif('Invalid key format'); return; }
+  apiKey = val;
+  document.getElementById('api-modal').style.display = 'none';
+  showNotif('API key updated ✓');
+}
+
+function showNotif(msg, duration = 2500) {
+  const el = document.getElementById('notif');
+  el.textContent = msg;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), duration);
+}
+
+function toggleCamera() { scanningActive ? stopCamera() : startCamera(); }
+
+function startCamera() {
+  document.getElementById('scan-status').textContent = 'Starting camera...';
+  document.getElementById('cam-btn').textContent = 'Stop Camera';
+
+  Quagga.init({
+    inputStream: {
+      name: 'Live', type: 'LiveStream',
+      target: document.getElementById('quagga-container'),
+      constraints: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 960 } }
+    },
+    decoder: { readers: ['ean_reader','ean_8_reader','upc_reader','upc_e_reader','code_128_reader','code_39_reader'] },
+    locate: true
+  }, err => {
+    if (err) { document.getElementById('scan-status').textContent = 'Camera error: ' + err.message; document.getElementById('cam-btn').textContent = 'Start Camera'; return; }
+    Quagga.start();
+    scanningActive = true;
+    document.getElementById('scan-anim').style.display = 'block';
+    document.getElementById('scan-status').textContent = 'Point at a barcode...';
+  });
+
+  let lastCode = null;
+  Quagga.onDetected(result => {
+    const code = result.codeResult.code;
+    if (code && code !== lastCode) {
+      lastCode = code;
+      stopCamera();
+      document.getElementById('manual-barcode').value = code;
+      showNotif('Scanned: ' + code);
+      analyzeShoe(code, null);
+    }
+  });
+}
+
+function stopCamera() {
+  if (scanningActive) { Quagga.stop(); scanningActive = false; }
+  document.getElementById('cam-btn').textContent = 'Start Camera';
+  document.getElementById('scan-anim').style.display = 'none';
+  document.getElementById('scan-status').textContent = 'Camera off';
+}
+
+function analyzeShoeManual() {
+  const barcode = document.getElementById('manual-barcode').value.trim();
+  const name = document.getElementById('manual-name').value.trim();
+  if (!barcode && !name) { showNotif('Enter a barcode or product name'); return; }
+  analyzeShoe(barcode || null, name || null);
+}
+
+async function analyzeShoe(barcode, productName) {
+  if (!apiKey) { document.getElementById('api-modal').style.display = 'flex'; return; }
+  document.getElementById('result-section').classList.add('visible');
+  setLoadingState();
+  const result = await runAIAnalysis(barcode, productName);
+  if (result) renderProduct(result);
+  else showNotif('Analysis failed — check your API key', 4000);
+}
+
+async function runAIAnalysis(barcode, productName) {
+  const prompt = `You are an expert footwear specialist at REI. Given this shoe ${barcode ? `barcode/UPC: ${barcode}` : ''}${productName ? ` product name: "${productName}"` : ''}, provide detailed information.
+
+Respond ONLY with valid JSON (no markdown fences):
+{
+  "brand": "Brand Name",
+  "name": "Full Product Name",
+  "type": "Trail Running / Road Running / Hiking / Approach / etc",
+  "gender": "Men's / Women's / Unisex",
+  "terrain": "Trail / Road / Multi-Terrain / etc",
+  "price": "$XXX",
+  "drop": "Xmm drop",
+  "pros": ["Pro 1", "Pro 2", "Pro 3", "Pro 4"],
+  "cons": ["Con 1", "Con 2", "Con 3"],
+  "who_for": "2-3 sentence description of the ideal customer: fitness level, use case, foot type, experience level, etc.",
+  "specs": {
+    "Weight": "X oz (men's 9)",
+    "Stack Height": "XXmm heel / XXmm toe",
+    "Drop": "Xmm",
+    "Upper": "Material description",
+    "Midsole": "Foam type",
+    "Outsole": "Rubber/lug description",
+    "Waterproof": "Yes / No",
+    "Last": "Standard / Wide / Narrow"
+  }
+}`;
+
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+      body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 1000, messages: [{ role: 'user', content: prompt }] }),
+    });
+    const data = await res.json();
+    if (data.error) throw new Error(data.error.message);
+    return JSON.parse(data.content[0].text.replace(/```json|```/g, '').trim());
+  } catch (err) { console.error('AI error:', err); return null; }
+}
+
+function setLoadingState() {
+  const load = '<li class="loading-state"><div class="spinner"></div> Analyzing...</li>';
+  document.getElementById('pros-list').innerHTML = load;
+  document.getElementById('cons-list').innerHTML = load;
+  document.getElementById('target-text').innerHTML = '<div class="loading-state"><div class="spinner"></div> Analyzing...</div>';
+  document.getElementById('specs-grid').innerHTML = '<div class="loading-state"><div class="spinner"></div> Loading...</div>';
+  document.getElementById('product-name').textContent = 'Analyzing...';
+  bays = []; renderBayList();
+}
+
+function renderProduct(p) {
+  currentProduct = p;
+  document.getElementById('product-name').textContent = p.name;
+  document.getElementById('product-brand').textContent = p.brand;
+  document.getElementById('product-type').textContent = p.type;
+  document.getElementById('product-price').textContent = p.price;
+  document.getElementById('meta-gender').textContent = p.gender || '';
+  document.getElementById('meta-terrain').textContent = p.terrain ? '· ' + p.terrain : '';
+  document.getElementById('meta-drop').textContent = p.drop ? '· ' + p.drop : '';
+  document.getElementById('pros-list').innerHTML = (p.pros || []).map(x => `<li>${x}</li>`).join('');
+  document.getElementById('cons-list').innerHTML = (p.cons || []).map(x => `<li>${x}</li>`).join('');
+  document.getElementById('target-text').textContent = p.who_for || '';
+  document.getElementById('specs-grid').innerHTML = Object.entries(p.specs || {}).map(([k,v]) =>
+    `<div class="spec-item"><div class="spec-label">${k}</div><div class="spec-value">${v}</div></div>`).join('');
+}
+
+function renderBayList() {
+  const list = document.getElementById('bay-list');
+  if (!bays.length) { list.innerHTML = '<div class="empty-bay">Add bays manually below.</div>'; return; }
+  list.innerHTML = bays.map((b, i) => `
+    <div class="bay-item ${b.done ? 'retrieved' : ''}">
+      <div class="bay-number">
+        <input type="text" value="${b.bay}" placeholder="Bay #"
+          style="background:transparent;border:none;color:var(--rei-accent);font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:20px;width:60px;padding:0;outline:none;"
+          oninput="bays[${i}].bay = this.value" />
+      </div>
+      <div class="bay-details">
+        <div class="bay-size">${b.note}</div>
+        <div class="bay-sub">${currentProduct ? currentProduct.name : ''}</div>
+      </div>
+      <button class="bay-check" onclick="toggleBay(${i})">${b.done ? '✓' : ''}</button>
+      <button class="btn-remove" onclick="removeBay(${i})">✕</button>
+    </div>`).join('');
+}
+
+function toggleBay(i) { bays[i].done = !bays[i].done; renderBayList(); }
+function removeBay(i) { bays.splice(i, 1); renderBayList(); }
+
+function addBayManual() {
+  const bayNum = document.getElementById('bay-num-input').value.trim();
+  const bayNote = document.getElementById('bay-size-input').value.trim();
+  if (!bayNote) { showNotif('Enter a size or note'); return; }
+  bays.push({ bay: bayNum, note: bayNote, done: false });
+  document.getElementById('bay-num-input').value = '';
+  document.getElementById('bay-size-input').value = '';
+  renderBayList();
+}
+
+function clearRetrieved() { bays = bays.filter(b => !b.done); renderBayList(); showNotif('Cleared retrieved items'); }
+function clearAllBays() { bays = []; renderBayList(); }
+
+function resetAll() {
+  stopCamera();
+  currentProduct = null; bays = [];
+  document.getElementById('manual-barcode').value = '';
+  document.getElementById('manual-name').value = '';
+  document.getElementById('result-section').classList.remove('visible');
+}
+</script>
+</body>
+</html>
